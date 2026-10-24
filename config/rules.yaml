@@ -1,0 +1,21 @@
+# Every number from the guidelines doc. Change them here, never in code.
+one_dependency_max_loss: 0.25     # rule 1: share of junior
+one_dependency_max_share: 0.30    # rule 2: share of TVL
+worst_case_max_loss: 0.75         # rule 3: share of junior
+reliable_yield_min_cover: 1.2     # rule 4
+locked_in_min_share: 0.50         # rule 5
+locked_in_window_days: 60         # rule 5
+cash_one_tx_min: 0.10             # rule 6: share of fixed tranche
+cash_24h_min: 0.25                # rule 7: share of fixed tranche
+junior_min_share: 0.15            # rule 8: share of TVL
+new_strategy_share: 0.25          # rule 10: share of its rule 1 cap
+new_strategy_weeks: 4             # rule 10
+warning_margin: 0.10              # "close to a limit"
+lending_haircut: 0.50             # what counts as cash
+dex_max_loss: 0.005               # what counts as cash
+loss_if_it_breaks:                # risk score -> loss if it breaks
+  1: 0.10
+  2: 0.25
+  3: 0.50
+  4: 0.75
+  5: 1.00

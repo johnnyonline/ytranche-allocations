@@ -1,0 +1,10 @@
+# Shared by all vaults. type: protocol | stablecoin | chain | collateral
+# TODO: risk scores from the risk team. These are placeholders.
+morpho:      {risk_score: 1, type: protocol}
+sky:         {risk_score: 1, type: stablecoin, note: USDS / sUSDS}
+pendle:      {risk_score: 2, type: protocol}
+grove:       {risk_score: 2, type: protocol}
+katana:      {risk_score: 3, type: chain, note: Katana chain + Vault Bridge}
+cap:         {risk_score: 3, type: stablecoin, note: cUSD / stcUSD}
+pawn_broker: {risk_score: 3, type: protocol, note: Yearn stcUSD/USDC lending market}
+threejane:   {risk_score: 3, type: stablecoin, note: 3Jane USD3}

@@ -1,0 +1,40 @@
+[project]
+name = "ytranche-allocations"
+version = "0.1.0"
+description = "Allocation Guidelines for yTranche"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ruff==0.14.11",
+    "mypy==1.19.1",
+    "PyYAML==6.0.3",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["allocations*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+lint.select = ["E", "F", "I", "W"]  # pycodestyle, pyflakes, isort, and warnings
+fix = true
+exclude = ["__pypackages__"]
+lint.ignore = ['E501']
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+strict = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+warn_unused_ignores = true
+disable_error_code = ["misc"]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

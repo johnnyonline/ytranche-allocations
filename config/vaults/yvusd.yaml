@@ -1,0 +1,97 @@
+# Amounts are in the vault's asset. Use null for unknown inputs.
+name: yvUSD
+asset: USD
+idle: 0
+# yvUSD isn't tranched yet: hypothetical 80% fixed / 20% junior split
+tranches:
+  fixed:   {size: 9402400, target: 0.05}
+  levered: {size: 1175300}
+  equity:  {size: 1175300}
+junior_withdrawals_in_cooldown: 0
+junior_withdrawals_due_7d: 0
+top_fixed_holders: null        # TODO
+junior_cooldown_days: 14
+loss_report_days: 7            # TODO: how long until a loss shows up in reports
+
+# All risk scores, the loop's leverage and Grove's incentive split are placeholder guesses.
+strategies:
+  - id: morpho_og
+    name: Morpho Yearn OG USDC Compounder
+    amount: 7070000
+    apy: 0.0693
+    yield: variable
+    apy_90d_low: null            # TODO
+    cash: lending
+    withdrawable_now: null       # TODO
+    dependencies: [morpho]       # TODO: add each market's collateral as {name, weight, role: collateral}
+
+  - id: grove_usds
+    name: USDC to Grove USDS Compounder
+    amount: 1000000
+    apy: 0.0518
+    incentive_apy: 0.0131        # TODO: assumes everything above the sUSDS rate is incentives
+    yield: steady
+    cash: instant                # TODO: confirm same-day exit
+    dependencies: [grove, sky]
+
+  - id: katana_yvusdc
+    name: Katana yvUSDC Compounder
+    amount: 931000
+    apy: 0.0519
+    yield: variable
+    apy_90d_low: null            # TODO
+    cash: other_chain
+    after_bridge: lending
+    withdrawable_now: null       # TODO
+    dependencies: [katana, morpho]   # TODO: confirm it allocates to Morpho vaults on Katana
+
+  - id: stcusd_loop
+    name: stcUSD/USDC Pawn Broker Looper
+    amount: 890000
+    apy: 0.119
+    leverage: 4                  # TODO: confirm
+    yield: variable
+    apy_90d_low: null            # TODO
+    cash: dex
+    sellable_24h: null           # TODO
+    dependencies: [cap, pawn_broker]
+
+  - id: susds
+    name: USDC To sUSDS Depositor
+    amount: 872000
+    apy: 0.0387
+    yield: steady
+    cash: instant
+    dependencies: [sky]
+
+  - id: pt_susds
+    name: sUSDS Pendle PT Maxi
+    amount: 581000
+    apy: 0.0542
+    yield: locked
+    maturity: null               # TODO
+    cash: dex
+    sellable_24h: null           # TODO
+    tags: [pt]
+    dependencies: [pendle, sky]
+
+  - id: pt_usd3
+    name: USD3 Pendle PT Maxi
+    amount: 409000
+    apy: 0.155
+    yield: locked
+    maturity: null               # TODO
+    cash: dex
+    sellable_24h: null           # TODO
+    tags: [pt]
+    dependencies: [pendle, threejane]
+
+scenarios:
+  - name: Biggest stablecoin drops 20%
+    shocks:
+      - {dependency: biggest_stablecoin, loss: 0.20, collateral_loss: 0.05}   # collateral_loss: TODO
+      - {tag: pt, loss: 0.03}
+  - name: USDS drops 20%
+    shocks:
+      - {dependency: sky, loss: 0.20, collateral_loss: 0.05}
+      - {tag: pt, loss: 0.03}

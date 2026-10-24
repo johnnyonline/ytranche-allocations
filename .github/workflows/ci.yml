@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-code:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: |
+          curl -Ls https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Set up project
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv sync
+
+      - name: Run Ruff format check
+        run: |
+          source .venv/bin/activate
+          ruff format . --check
+
+      - name: Run Ruff linter
+        run: |
+          source .venv/bin/activate
+          ruff check .
+
+      - name: Run mypy
+        run: |
+          source .venv/bin/activate
+          mypy allocations
