@@ -34,7 +34,7 @@ class Rule:
     value: float | None = None
     limit: float | None = None
     status: str = NA
-    worst: list[str] = field(default_factory=list)  # rules 1, 2, 3 and 10: the worst dependency, scenario or strategy
+    worst: list[str] = field(default_factory=list)  # rules 1, 2, 3, 10 and 12: the worst item they check
     missing: list[Missing] = field(default_factory=list)
 
 
@@ -60,6 +60,17 @@ class DependencyRow:
 
 
 @dataclass
+class GroupRow:
+    """Rule 12: everything at risk score `score` or riskier."""
+
+    score: int
+    shares: dict[str, float]  # strategy id -> how much of it counts toward the group
+    exposure: float
+    limit: float
+    status: str
+
+
+@dataclass
 class ScenarioRow:
     name: str
     loss: float
@@ -71,7 +82,7 @@ class CapRow:
     strategy: Strategy
     cap: float
     rule: int | None  # what sets the cap
-    dependency: str | None
+    dependency: str | None  # or the risk group, for rule 12
 
 
 @dataclass
@@ -92,6 +103,7 @@ class Report:
     tranche_sizes: float
     rules: list[Rule]
     dependencies: list[DependencyRow]
+    groups: list[GroupRow]
     scenarios: list[ScenarioRow]
     reliable: dict[str, tuple[float, float]]  # yield type -> (amount, reliable yield a year)
     break_even_low: float | None
@@ -211,6 +223,13 @@ def run(numbers: Rules, dependencies: dict[str, Dependency], vault: Vault, today
         if rule_4.status == NEEDS_DATA:
             rule_11.status = NEEDS_DATA
 
+    # Rule 12: TVL at each risk score or riskier
+    groups = _group_rows(strategies, dependencies, numbers.risk_group_max_share, tvl, margin)
+    rule_12 = _worst(
+        Rule(12, "TVL at a risk score or riskier", "tvl", "≤"),
+        [(f"risk {g.score}+", g.exposure, g.limit, g.status) for g in groups],
+    )
+
     return Report(
         numbers=numbers,
         vault=vault,
@@ -219,13 +238,14 @@ def run(numbers: Rules, dependencies: dict[str, Dependency], vault: Vault, today
         junior=junior,
         owed=owed,
         tranche_sizes=sum(t.size for t in tranches),
-        rules=[rule_1, rule_2, rule_3, rule_4, rule_5, rule_6, rule_7, rule_8, rule_9, rule_10, rule_11],
+        rules=[rule_1, rule_2, rule_3, rule_4, rule_5, rule_6, rule_7, rule_8, rule_9, rule_10, rule_11, rule_12],
         dependencies=rows,
+        groups=groups,
         scenarios=scenarios,
         reliable=reliable,
         break_even_low=break_even_low,
         max_fixed_target=max_fixed_target,
-        caps=[CapRow(s, *_cap(s, links, rows, limit_1, limit_2)) for s in strategies],
+        caps=[CapRow(s, *_cap(s, links, rows, limit_1, limit_2, groups)) for s in strategies],
     )
 
 
@@ -276,6 +296,30 @@ def _dependency_rows(
                     name, exposure, loss, rates, _at_most(loss, limit_1, margin), _at_most(exposure, limit_2, margin)
                 )
             )
+    return rows
+
+
+def _group_rows(
+    strategies: list[Strategy],
+    dependencies: dict[str, Dependency],
+    caps: dict[int, float | None],
+    tvl: float,
+    margin: float,
+) -> list[GroupRow]:
+    """Rule 12. A strategy counts toward "risk N or riskier" by the weights of its dependencies scored N or more."""
+    rows = []
+    for score, cap in caps.items():
+        if cap is None:  # no cap
+            continue
+        shares: dict[str, float] = {}
+        for s in strategies:
+            share = min(sum(use.weight for use in s.dependencies if dependencies[use.name].risk_score >= score), 1.0)
+            if share > 0:
+                shares[s.id] = share
+        if shares:
+            exposure = sum(s.amount * s.leverage * shares[s.id] for s in strategies if s.id in shares)
+            limit = cap * tvl
+            rows.append(GroupRow(score, shares, exposure, limit, _at_most(exposure, limit, margin)))
     return rows
 
 
@@ -394,21 +438,33 @@ def _cooldown(vault: Vault, margin: float) -> Rule:
 
 
 def _cap(
-    s: Strategy, links: list[Link], rows: list[DependencyRow], limit_1: float, limit_2: float | None
+    s: Strategy,
+    links: list[Link],
+    rows: list[DependencyRow],
+    limit_1: float,
+    limit_2: float | None,
+    groups: list[GroupRow] | None = None,
 ) -> tuple[float, int | None, str | None]:
-    """The most the strategy could hold under rule 1 (and rule 2 if limit_2 is given) if everything else stays the same."""
+    """The most the strategy could hold under rule 1 (and rules 2 and 12 if given) if everything else stays the same."""
     totals = {row.name: row for row in rows}
-    best: tuple[float, int | None, str | None] = (math.inf, None, None)
+    options: list[tuple[int, float, float, str]] = []  # (rule, room left, room used per unit held, what sets it)
     for link in links:
         if link.strategy is not s:
             continue
         row, weight = totals[link.use.name], link.use.weight
-        options = [(1, limit_1 - (row.loss - link.loss), min(s.leverage * weight * link.loss_rate, weight))]
+        options.append(
+            (1, limit_1 - (row.loss - link.loss), min(s.leverage * weight * link.loss_rate, weight), link.use.name)
+        )
         if limit_2 is not None:
-            options.append((2, limit_2 - (row.exposure - link.exposure), s.leverage * weight))
-        for rule, room, per_unit in options:
-            if per_unit > 0 and room / per_unit < best[0]:
-                best = (room / per_unit, rule, link.use.name)
+            options.append((2, limit_2 - (row.exposure - link.exposure), s.leverage * weight, link.use.name))
+    for group in groups or []:
+        share = group.shares.get(s.id, 0.0)
+        room = group.limit - (group.exposure - s.amount * s.leverage * share)
+        options.append((12, room, s.leverage * share, f"risk {group.score}+"))
+    best: tuple[float, int | None, str | None] = (math.inf, None, None)
+    for rule, room, per_unit, by in options:
+        if per_unit > 0 and room / per_unit < best[0]:
+            best = (room / per_unit, rule, by)
     return max(best[0], 0.0), best[1], best[2]
 
 
@@ -430,13 +486,14 @@ def _check(rule: Rule, value: float, limit: float, margin: float) -> Rule:
 
 
 def _worst(rule: Rule, items: list[tuple[str, float, float, str]]) -> Rule:
-    """For rules checked per dependency, scenario or strategy: (label, value, limit, status) of each."""
+    """For rules checked per dependency, scenario, strategy or risk group: (label, value, limit, status) of each."""
     if not items:
         return rule
 
     def badness(item: tuple[str, float, float, str]) -> tuple[int, float, float]:
         _, value, limit, status = item
-        return SEVERITY[status], value / limit if limit > 0 else math.inf, value
+        share = value / limit if limit > 0 else math.inf if value > 0 else 0.0  # 0 of a 0 limit is nothing used
+        return SEVERITY[status], share, value
 
     top = max(items, key=badness)
     _, rule.value, rule.limit, rule.status = top

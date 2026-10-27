@@ -79,6 +79,7 @@ class Rules:
     lending_haircut: float
     dex_max_loss: float
     loss_if_it_breaks: dict[int, float]
+    risk_group_max_share: dict[int, float | None]  # None: no cap
 
 
 @dataclass
@@ -188,15 +189,27 @@ def _read(path: Path) -> Any:
 def _rules(data: Any) -> Rules:
     names = tuple(f.name for f in fields(Rules))
     f = _Fields(data, "rules.yaml", names)
-    table = f.get("loss_if_it_breaks")
-    if not isinstance(table, dict) or set(table) != {1, 2, 3, 4, 5}:
-        raise ConfigError("rules.yaml: loss_if_it_breaks needs one entry for each risk score 1 to 5")
-    losses = {score: _number(loss, f"rules.yaml: loss_if_it_breaks {score}") for score, loss in table.items()}
-    numbers = {name: f.number(name) for name in names if name != "loss_if_it_breaks"}
+    losses = {
+        score: _not_negative(loss, f"rules.yaml: loss_if_it_breaks {score}")
+        for score, loss in _by_score(f, "loss_if_it_breaks").items()
+    }
+    group_caps = {
+        score: None if cap is None else _not_negative(cap, f"rules.yaml: risk_group_max_share {score}")
+        for score, cap in _by_score(f, "risk_group_max_share").items()
+    }
+    numbers = {name: f.number(name) for name in names if name not in ("loss_if_it_breaks", "risk_group_max_share")}
     for name, value in numbers.items():
         if value < 0 or (value == 0 and name in ("locked_in_window_days", "reliable_yield_min_cover")):
             raise ConfigError(f"rules.yaml: {name} can't be {value:g}")
-    return Rules(**numbers, loss_if_it_breaks=losses)
+    return Rules(**numbers, loss_if_it_breaks=losses, risk_group_max_share=group_caps)
+
+
+def _by_score(f: "_Fields", key: str) -> dict[int, Any]:
+    """A rules.yaml table with one entry for each risk score 1 to 5, in order."""
+    table = f.get(key)
+    if not isinstance(table, dict) or set(table) != {1, 2, 3, 4, 5}:
+        raise ConfigError(f"rules.yaml: {key} needs one entry for each risk score 1 to 5")
+    return {score: table[score] for score in sorted(table)}
 
 
 def _dependencies(data: Any) -> dict[str, Dependency]:
@@ -321,6 +334,13 @@ def _number(value: Any, where: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
         raise ConfigError(f"{where} must be a number, got {value!r}")
     return float(value)
+
+
+def _not_negative(value: Any, where: str) -> float:
+    number = _number(value, where)
+    if number < 0:
+        raise ConfigError(f"{where} can't be {number:g}")
+    return number
 
 
 class _Fields:
