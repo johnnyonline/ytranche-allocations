@@ -2,7 +2,7 @@
 
 import math
 
-from allocations.checks import OK, SEVERITY, DependencyRow, Move, Report, Rule, pct
+from allocations.checks import OK, SEVERITY, DependencyRow, GroupRow, Move, Report, Rule, pct
 
 
 def full(report: Report, markdown: bool) -> str:
@@ -37,19 +37,34 @@ def full(report: Report, markdown: bool) -> str:
             for d in sorted(report.dependencies, key=lambda d: -d.loss)
         ],
     )
+    out.heading("Risk groups (rule 12)")
+    out.table(
+        ["Risk", "Strategies", "Exposure (% of TVL)", "Limit (% of TVL)", "Status"],
+        [
+            [
+                f"{g.score}+",
+                _members(g),
+                out.share(g.exposure, report.tvl),
+                out.share(g.limit, report.tvl),
+                g.status,
+            ]
+            for g in report.groups
+        ],
+    )
     _details(out)
     _missing(out)
     return out.text()
 
 
 def caps(report: Report, markdown: bool, header: bool = True) -> str:
-    """How much each strategy can hold under rules 1 and 2."""
+    """How much each strategy can hold under rules 1, 2 and 12."""
     out = _Out(report, markdown)
     if header:
         out.header("caps")
     out.heading("Caps")
     out.paragraph(
-        "The most each strategy could hold under rules 1 and 2 if everything else stays the same (same TVL, same junior)."
+        "The most each strategy could hold under rules 1, 2 and 12 if everything else stays the same"
+        " (same TVL, same junior)."
     )
     rows = []
     for c in sorted(report.caps, key=lambda c: c.cap - c.strategy.amount):
@@ -116,6 +131,20 @@ def moved(before: Report, after: Report, moves: list[Move], markdown: bool) -> s
             ]
             for d in sorted(after.dependencies, key=lambda d: -d.loss)
             if not (_same(old[d.name].exposure, d.exposure) and _same(old[d.name].loss, d.loss))
+        ],
+    )
+    out.heading("Risk groups that changed")
+    old_groups = {g.score: g for g in before.groups}  # moves change amounts, not who is in a group
+    out.table(
+        ["Risk", "Exposure (% of TVL)", "Status"],
+        [
+            [
+                f"{g.score}+",
+                f"{out.share(old_groups[g.score].exposure, before.tvl)} → {out.share(g.exposure, after.tvl)}",
+                _change(old_groups[g.score].status, g.status),
+            ]
+            for g in after.groups
+            if not _same(old_groups[g.score].exposure, g.exposure)
         ],
     )
     return out.text()
@@ -290,6 +319,11 @@ def _share(x: float, whole: float) -> str:
 
 def _rates(rates: list[float]) -> str:
     return pct(rates[0]) if len(rates) == 1 else f"{pct(rates[0])} to {pct(rates[-1])}"
+
+
+def _members(group: GroupRow) -> str:
+    """The strategies in a risk group, with how much of each counts when it's not all of it."""
+    return ", ".join(sid if share >= 1 else f"{sid} ({pct(share)})" for sid, share in group.shares.items())
 
 
 def _dependency_worst(d: DependencyRow) -> str:

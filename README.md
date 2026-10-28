@@ -2,11 +2,11 @@
 
 Allocation Guidelines for yTranche.
 
-Checks a yTranche vault (yvUSD, yvETH) against the [allocation guidelines](GUIDELINES.md). It runs the 11 rules on the vault's strategies, answers "what if I move X from A to B?", and shows how much each strategy can hold. Every limit is a % of the junior (the levered and equity tranches together).
+Checks a yTranche vault (yvUSD, yvETH) against the [allocation guidelines](GUIDELINES.md). It runs the 12 rules on the vault's strategies, answers "what if I move X from A to B?", and shows how much each strategy can hold. Every limit is a % of the junior (the levered and equity tranches together).
 
 v1 reads everything from the YAML files in [`config/`](config/). Nothing is read onchain yet.
 
-[`GUIDELINES.md`](GUIDELINES.md) is a copy of the team's HackMD doc as of 2026-10-23. When the rules change there, paste the new text over it and update `config/rules.yaml` to match.
+When a rule changes in [`GUIDELINES.md`](GUIDELINES.md), update [`config/rules.yaml`](config/rules.yaml) to match.
 
 ## Installation
 
@@ -137,7 +137,7 @@ Copy `config/vaults/yvusd.yaml` to e.g. `config/vaults/yveth.yaml`, fill it in, 
 ## Code
 
 - [`allocations/config.py`](allocations/config.py): loads and validates the config. It's the only place that reads data, so onchain reads (balances, tranche sizes, the junior cooldown queue, 90-day lows, ...) can replace config values here one at a time.
-- [`allocations/checks.py`](allocations/checks.py): the math (rules 1 to 11, caps, `--move`).
+- [`allocations/checks.py`](allocations/checks.py): the math (rules 1 to 12, caps, `--move`).
 - [`allocations/report.py`](allocations/report.py): plain-text and markdown output.
 - [`allocations/main.py`](allocations/main.py): the command line.
 
@@ -166,12 +166,17 @@ These are decisions [the guidelines](GUIDELINES.md) don't spell out.
   - Strategies holding 0 have nothing to exit, so they're skipped.
   - A missing `exit_days` on a locked strategy counts as 0 and is listed as missing.
 - Rule 10: "less than 4 weeks ago" means fewer than 28 days before `--date`. A strategy's rule 1 cap is the smallest across its dependencies, the same as in `--caps`.
+- Rule 12:
+  - How much of a strategy counts toward "risk N or riskier" is the sum of the weights of its dependencies scored N or more, capped at 100%. With the default weight of 1, the strategy's riskiest dependency decides.
+  - Loops count at full size (amount × leverage), like rule 2, so a group can be over 100% of TVL.
+  - Idle and strategies with no dependencies aren't in any group. `null` in `risk_group_max_share` means no cap.
 
 **Moves, caps and display**
 - `--move`:
   - It keeps `withdrawable_now` and `sellable_24h` as they are, because they're market conditions, but caps them at the new amount.
   - Moves run in order, and each one checks that FROM holds enough at that point.
-- Caps hold TVL and junior fixed. In other words, the extra money is assumed to come from somewhere that doesn't share the strategy's dependencies. A strategy with no dependencies shows "no limit".
+- Caps hold TVL and junior fixed. In other words, the extra money is assumed to come from somewhere that doesn't share the strategy's dependencies or risk groups. A strategy with no dependencies shows "no limit".
+- A cap is the lowest that rules 1, 2 and 12 allow. For rule 12, the group's room is divided by leverage × the strategy's share of the group.
 - In the dependency table, the loss rate is the rate used: the risk score's rate (or an entry's `loss` override) plus the strategy's `exit_discount`. A range is shown when strategies differ. The status is the worse of rules 1 and 2.
 - The 1% tolerance for "the tranche sizes add up to TVL" is a constant in `checks.py`. It isn't one of the guidelines' numbers, so it's not in `rules.yaml`.
 - Amounts print as whole numbers when TVL is 100,000 or more, and with 2 decimals below that (for ETH-sized books).

@@ -47,6 +47,10 @@ The junior pays for all three. So every limit below is a % of the junior, and wh
 10. New strategies start at 25% of what rule 1 allows, for the first 4 weeks.
 11. Tranche targets are set so rule 4 passes at today's reliable yield. Reviewed monthly.
 
+**Risk groups**
+
+12. No more than a set share of TVL at each risk score or riskier (table below). So everything scored 3, 4 or 5 together stays under the risk 3 cap.
+
 **Rule 1 example:** junior = 20M, so any one dependency breaking can cost us at most 5M. If it would lose 100% when it breaks, we can put at most 5M in it. If it would lose 20%, at most 25M. If the junior drops to 10M, all these limits halve.
 
 ### Risk score → loss if it breaks
@@ -57,6 +61,17 @@ The junior pays for all three. So every limit below is a % of the junior, and wh
 | [3] | [50%] |
 | [4] | [75%] |
 | [5] | [100%] |
+
+### Risk groups (rule 12)
+| Risk score | Max share of TVL at this score or riskier |
+|---|---|
+| [1] | [no cap] |
+| [2] | [50%] |
+| [3] | [30%] |
+| [4] | [10%] |
+| [5] | [5%] |
+
+Risk 1 has no cap, since capping the safest group would only push money into riskier ones. A strategy counts toward a group by how much of it depends on something at that score or riskier. For example, a lending strategy with 5% of its loans against a risk-4 collateral counts 5% of its size toward risk 4 or riskier.
 
 ### What counts as cash (rules 6 and 7)
 | Position | In one transaction | Within 24h |
@@ -73,7 +88,7 @@ The junior pays for all three. So every limit below is a % of the junior, and wh
 
 ## Before any allocation change
 1. Get the risk score and list every dependency the strategy uses.
-2. Check rules 1 to 3 with the change included.
+2. Check rules 1 to 3 and rule 12 with the change included.
 3. Check rules 4 to 7. If it's a new strategy, size it with rule 10.
 
 ## When we break a limit
@@ -91,6 +106,7 @@ A breach is fixed either by reducing the position or by the junior growing back.
 3. Worst-case scenario loss as % of the junior
 4. Reliable yield vs yield we owe, and how much of it is locked in
 5. Cash available (one transaction and 24h) vs what rules 6 and 7 need
+6. TVL at each risk score or riskier vs rule 12
 
 Plus a table with every dependency: how much we have in it, its loss if it breaks, and that loss as % of the junior.
 

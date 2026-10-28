@@ -19,3 +19,9 @@ loss_if_it_breaks:                # risk score -> loss if it breaks
   3: 0.50
   4: 0.75
   5: 1.00
+risk_group_max_share:             # rule 12: share of TVL at this risk score or riskier
+  1: null                         # null: no cap
+  2: 0.50
+  3: 0.30
+  4: 0.10
+  5: 0.05
